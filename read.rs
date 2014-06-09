@@ -40,27 +40,34 @@ segment table (variable: 1 byte per segment)
     fn next_packet(&mut self) -> Option<Vec<u8>> {
         let mut packet : Vec<u8> = Vec::new();
         loop {
-            let segment = self.next_segment();
-            if segment.len() < 255 {
-                return Some(packet.append(segment.as_slice()));
-            } else {
-                packet = packet.append(segment.as_slice());
+
+            match self.next_segment() {
+                None => { return None }
+                Some(segment) => {
+                    if segment.len() < 255 {
+                        return Some(packet.append(segment.as_slice()));
+                    } else {
+                        packet = packet.append(segment.as_slice());
+                    }
+                }
             }
         }
     }
 
     // Removes the next segment off of the segment list and return it
-    fn next_segment(&mut self) -> Vec<u8> {
+    fn next_segment(&mut self) -> Option<Vec<u8>> {
         if self.current_segment_lengths.len() == 0 {
+            if self.end_of_stream {
+                return None;
+            } else {
             self.read_page();
+            }
         }
-
-        // TODO: check end of stream
 
         let mut segment = Vec::from_elem(self.current_segment_lengths.as_slice()[0].to_uint().unwrap(), 0_u8);
         self.current_segment_lengths = Vec::from_slice(self.current_segment_lengths.tail());
         self.file.read(segment.as_mut_slice());
-        segment
+        Some(segment)
     }
 
     // reads the next page of the bitstream (through the segment table, but not
@@ -74,6 +81,8 @@ segment table (variable: 1 byte per segment)
         // initializing it first (maybe use a BufferedReader)
         let mut header = Vec::from_elem(27, 0_u8);
         self.file.read(header.as_mut_slice());
+        let header_type = header.get(5);
+        self.end_of_stream = (*header_type == 0x04_u8);
         let segment_count = header.as_slice()[26].to_uint().unwrap();
         let mut segment_table : Vec<u8> = Vec::from_elem(segment_count, 0_u8);
         self.file.read(segment_table.as_mut_slice());
@@ -86,18 +95,6 @@ fn main() {
     let mut maybe_f = File::open(&Path::new("star_wars.ogg"));
     match maybe_f {
         Ok(mut f) => {
-
-            //let mut header : Vec<u8> = Vec::from_elem(27, 0_u8);
-            // println!("vector reference length: {}", header.len());
-            // println!("vector reference capacity: {}", header.capacity());
-            // let mut header_slice = header.mut_slice(0, 27);
-            // println!("slice length: {}", header_slice.len());
-            // match f.read_at_least(3, header_slice) {
-            //     Ok(bytes_read) => { println!("bytes read: {}", bytes_read); }
-            //     Err(error) => { println!("error {}", error); }
-            // }
-
-            //     //println!("{}", header_slice.len());
             let mut bs = OggBitstream::new(f);
             let mut next_packet = bs.next_packet();
             while next_packet.is_some() {
