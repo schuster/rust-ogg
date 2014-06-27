@@ -6,3 +6,8 @@ libogg: src/lib.rs
 
 examples: libogg examples/*.rs
 	rustc -L target --out-dir examples examples/*.rs
+
+test:
+	mkdir -p bin
+	rustc --test -o bin/test src/lib.rs
+	./bin/test

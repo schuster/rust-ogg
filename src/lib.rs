@@ -4,7 +4,6 @@
 //use std::option::Option;
 //use std::vec::Vec;
 
-
 // A bitstream is represented by the stream itself (read to a certain point),
 // plus any information needed to process the remainder of the stream at that
 // point
@@ -60,7 +59,7 @@ segment table (variable: 1 byte per segment)
             if self.end_of_stream {
                 return None;
             } else {
-            self.read_page();
+                self.read_page();
             }
         }
 
@@ -82,7 +81,8 @@ segment table (variable: 1 byte per segment)
         let mut header = Vec::from_elem(27, 0_u8);
         self.bitstream.read(header.as_mut_slice());
         let header_type = header.get(5);
-        self.end_of_stream = (*header_type == 0x04_u8);
+        self.end_of_stream = (header_type.bitor(&0b11111011u8) == 0xffu8);
+        println!("{}, {}", header_type, self.end_of_stream);
         let segment_count = header.as_slice()[26].to_uint().unwrap();
         let mut segment_table : Vec<u8> = Vec::from_elem(segment_count, 0_u8);
         self.bitstream.read(segment_table.as_mut_slice());
@@ -92,25 +92,56 @@ segment table (variable: 1 byte per segment)
 
 #[cfg(test)]
 mod tests {
+//    extern crate ogg;
+
+    use std::io::BufReader;
+    use OggBitstream;
+
     #[test]
     fn some_test() {
         assert!(1 == 1);
     }
 
-/*    #[test]
+    fn make_test_packet(header_type : u8, segment : Vec<u8>) -> Vec<u8> {
+        let mut packet : Vec<u8> = Vec::new();
+        packet.push_all(b"OggS");
+        // version
+        packet.push(0);
+        // header type
+        packet.push(header_type);
+        // absolute granule position
+        packet.push_all([0, 0, 0, 0, 0, 0, 0, 0]);
+        // stream serial number
+        packet.push_all([0, 0, 0, 0]);
+        // page sequence number
+        packet.push_all([0, 0, 0, 0]);
+        // checksum
+        packet.push_all([0, 0, 0, 0]);
+        // segment count
+        packet.push(1);
+        // segment table
+        packet.push(segment.len().to_u8().unwrap());
+        // segment itself
+        packet.append(segment.as_slice())
+    }
+
+    #[test]
     fn check_short_packet() {
         // check to see that a packet with a single byte is read correctly (has
         // correct length) when we read it (and that we get a "no more packets",
         // or whatever)
-        let stream = OggBitstream::new(stuff here...);
-        let maybe_packet = stream.nextPacket();
-        // TODO: check that the packet really is a packet
-        match maybe_packet {
-            None => failTest()???;
-            Some(packet) => {
-                assertPacketLength();
-                // TODO: check that next packet does not exist
-            }
+
+        let packet = make_test_packet(7, vec![1]);
+        let mut stream = OggBitstream::new(box BufReader::new(packet.as_slice()));
+
+        match stream.next_packet() {
+            None => fail!("Did not receive first packet"),
+            Some(packet) => assert_eq!(1, packet.len())
         }
-    } */
+
+        match stream.next_packet() {
+            None => {}
+            Some(_) => fail!("got too many packets")
+        }
+    }
 }
